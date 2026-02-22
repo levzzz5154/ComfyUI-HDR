@@ -1,0 +1,23 @@
+# Large test files
+*.dng
+*.png
+*.tiff
+*.tif
+*.exr
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
