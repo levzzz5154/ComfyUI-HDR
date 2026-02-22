@@ -374,3 +374,41 @@ class TonemapImage:
             result = image
 
         return (result.clamp(0, 1),)
+
+
+class LinearToSRGB:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "gamma": ("FLOAT", {"default": 2.2, "min": 1.0, "max": 4.0, "step": 0.1}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "convert"
+    CATEGORY = "image/HDR"
+
+    def convert(self, image, gamma=2.2):
+        return (torch.pow(image.clamp(0, 1), 1.0 / gamma),)
+
+
+class SRGBToLinear:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "gamma": ("FLOAT", {"default": 2.2, "min": 1.0, "max": 4.0, "step": 0.1}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "convert"
+    CATEGORY = "image/HDR"
+
+    def convert(self, image, gamma=2.2):
+        return (torch.pow(image.clamp(0, 1), gamma),)
