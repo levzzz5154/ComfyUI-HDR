@@ -1,4 +1,4 @@
-from .hdr_nodes import LoadHDRImage, HDRVAEEncode, HDRVAEDecode, HDRSaveImage, HDRPreviewImage, TonemapImage, LinearToSRGB, SRGBToLinear
+from .hdr_nodes import LoadHDRImage, HDRVAEEncode, HDRVAEDecode, HDRSaveImage, HDRPreviewImage, TonemapImage, LinearToSRGB, SRGBToLinear, SaveLatentToNpy
 
 NODE_CLASS_MAPPINGS = {
     "LoadHDRImage": LoadHDRImage,
@@ -9,6 +9,7 @@ NODE_CLASS_MAPPINGS = {
     "TonemapImage": TonemapImage,
     "LinearToSRGB": LinearToSRGB,
     "SRGBToLinear": SRGBToLinear,
+    "SaveLatentToNpy": SaveLatentToNpy,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -20,6 +21,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "TonemapImage": "Tonemap Image",
     "LinearToSRGB": "Linear to sRGB",
     "SRGBToLinear": "sRGB to Linear",
+    "SaveLatentToNpy": "Save Latent to NPY",
 }
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']

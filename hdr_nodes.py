@@ -217,6 +217,7 @@ class HDRVAEEncode:
             "required": {
                 "pixels": ("IMAGE",),
                 "vae": ("VAE",),
+                "dtype": (["auto", "fp32"], {"default": "auto"}),
             }
         }
 
@@ -225,8 +226,14 @@ class HDRVAEEncode:
 
     CATEGORY = "latent/HDR"
 
-    def encode(self, vae, pixels):
-        t = vae.encode(pixels)
+    def encode(self, vae, pixels, dtype="auto"):
+        if dtype == "fp32":
+            original_dtype = next(vae.first_stage_model.parameters()).dtype
+            vae.first_stage_model = vae.first_stage_model.float()
+            t = vae.encode(pixels)
+            vae.first_stage_model = vae.first_stage_model.to(original_dtype)
+        else:
+            t = vae.encode(pixels)
         return ({"samples": t},)
 
 
@@ -237,6 +244,7 @@ class HDRVAEDecode:
             "required": {
                 "samples": ("LATENT",),
                 "vae": ("VAE",),
+                "dtype": (["auto", "fp32"], {"default": "auto"}),
             }
         }
 
@@ -245,12 +253,19 @@ class HDRVAEDecode:
 
     CATEGORY = "latent/HDR"
 
-    def decode(self, vae, samples):
+    def decode(self, vae, samples, dtype="auto"):
         latent = samples["samples"]
         if hasattr(latent, 'is_nested') and latent.is_nested:
             latent = latent.unbind()[0]
 
-        images = vae.decode(latent)
+        if dtype == "fp32":
+            original_dtype = next(vae.first_stage_model.parameters()).dtype
+            vae.first_stage_model = vae.first_stage_model.float()
+            images = vae.decode(latent)
+            vae.first_stage_model = vae.first_stage_model.to(original_dtype)
+        else:
+            images = vae.decode(latent)
+
         if len(images.shape) == 5:
             images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
         return (images,)
@@ -412,3 +427,40 @@ class SRGBToLinear:
 
     def convert(self, image, gamma=2.2):
         return (torch.pow(image.clamp(0, 1), gamma),)
+
+
+class SaveLatentToNpy:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "samples": ("LATENT",),
+                "filename_prefix": ("STRING", {"default": "latent"}),
+            }
+        }
+
+    RETURN_TYPES = ()
+    FUNCTION = "save"
+    OUTPUT_NODE = True
+    CATEGORY = "latent/HDR"
+
+    def __init__(self):
+        self.output_dir = folder_paths.get_output_directory()
+
+    def save(self, samples, filename_prefix="latent"):
+        latent = samples["samples"]
+        
+        full_output_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
+            filename_prefix, self.output_dir, latent.shape[2], latent.shape[1]
+        )
+        
+        filepath = os.path.join(full_output_folder, f"{filename}_{counter:05}_.npy")
+        np.save(filepath, latent.cpu().numpy())
+        
+        results = [{
+            "filename": f"{filename}_{counter:05}_.npy",
+            "subfolder": subfolder,
+            "type": "output"
+        }]
+        
+        return {"ui": {"files": results}}
