@@ -16,22 +16,9 @@ except ImportError:
 
 from PIL import Image
 
-import safetensors.torch
-
 
 def load_npy(filepath):
     arr = np.load(filepath)
-    print(f"Loaded: shape={arr.shape}, dtype={arr.dtype}")
-    return arr
-
-
-def load_latent(filepath):
-    latent = safetensors.torch.load_file(filepath, device="cpu")
-    arr = latent["latent_tensor"].float().numpy()
-    multiplier = 1.0
-    if "latent_format_version_0" not in latent:
-        multiplier = 1.0 / 0.18215
-    arr = arr * multiplier
     print(f"Loaded: shape={arr.shape}, dtype={arr.dtype}")
     return arr
 
@@ -45,49 +32,49 @@ def prepare_array(arr):
     elif arr.ndim == 3:
         if arr.shape[0] <= 4:
             arr = arr.transpose(1, 2, 0)
-
+    
     if arr.ndim == 2:
         arr = np.stack([arr] * 3, axis=-1)
-
+    
     if arr.shape[2] == 4:
         arr = arr[:, :, :3]
-
+    
     return arr
 
 
 def create_sdr_image(arr, gamma=2.2):
     min_val = arr.min()
     max_val = arr.max()
-
+    
     normalized = (arr - min_val) / (max_val - min_val)
-
+    
     sdr = np.power(normalized, 1.0 / gamma)
     sdr = np.clip(sdr, 0, 1)
-
+    
     sdr_8bit = (sdr * 255).astype(np.uint8)
     return sdr_8bit, normalized, min_val, max_val
 
 
 def create_gain_map(hdr_normalized, sdr_8bit, gamma=2.2, max_boost=3.0):
     sdr_linear = sdr_8bit.astype(np.float32) / 255.0
-
+    
     sdr_lum = np.mean(sdr_linear, axis=2)
-
+    
     bright_mask = sdr_lum > 0.75
-
+    
     ratio = np.ones_like(sdr_lum) * 0.4
-
+    
     ratio[bright_mask] = 1.0 + (sdr_lum[bright_mask] - 0.75) * 8.0
     ratio = np.clip(ratio, 0.33, max_boost)
-
+    
     log_gain = np.log2(ratio)
-
+    
     log_max = np.log2(max_boost)
     normalized_gain = (log_gain) / (2 * log_max) + 0.5
     normalized_gain = np.clip(normalized_gain, 0, 1)
-
+    
     gain_map_8bit = (normalized_gain * 255).astype(np.uint8)
-
+    
     return gain_map_8bit
 
 
@@ -145,11 +132,11 @@ def create_mpf_marker(primary_length, gain_map_length):
 
 def save_ultrahdr_jpeg(sdr_8bit, gain_map_8bit, output_path, quality=95, max_boost=8.0):
     sdr_rgb = cv2.cvtColor(sdr_8bit, cv2.COLOR_RGB2BGR) if HAS_CV2 else sdr_8bit
-
+    
     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
     _, sdr_encoded = cv2.imencode('.jpg', sdr_rgb, encode_param)
     sdr_bytes = sdr_encoded.tobytes()
-
+    
     if HAS_CV2:
         if len(gain_map_8bit.shape) == 2:
             gain_map_bgr = cv2.cvtColor(gain_map_8bit, cv2.COLOR_GRAY2BGR)
@@ -162,20 +149,20 @@ def save_ultrahdr_jpeg(sdr_8bit, gain_map_8bit, output_path, quality=95, max_boo
         gain_buffer = io.BytesIO()
         gain_img.save(gain_buffer, format='JPEG', quality=quality)
         gain_bytes = gain_buffer.getvalue()
-
+    
     xmp = create_ultrahdr_xmp(len(gain_bytes), max_boost)
     xmp_bytes = xmp.encode('utf-8')
-
+    
     output = bytearray()
-
+    
     soi_found = False
     app0_found = False
     pos = 0
-
+    
     while pos < len(sdr_bytes):
         if sdr_bytes[pos] == 0xFF:
             marker = sdr_bytes[pos + 1] if pos + 1 < len(sdr_bytes) else 0
-
+            
             if marker == 0xD8:
                 output.extend(sdr_bytes[pos:pos+2])
                 pos += 2
@@ -189,7 +176,7 @@ def save_ultrahdr_jpeg(sdr_8bit, gain_map_8bit, output_path, quality=95, max_boo
                 output.extend(sdr_bytes[pos:app0_end])
                 pos = app0_end
                 app0_found = True
-
+                
                 output.extend(b'\xFF\xE1')
                 xmp_header = b'http://ns.adobe.com/xap/1.0/\x00'
                 xmp_segment = xmp_header + xmp_bytes
@@ -207,12 +194,12 @@ def save_ultrahdr_jpeg(sdr_8bit, gain_map_8bit, output_path, quality=95, max_boo
                 pos += 2 + seg_len
                 continue
         pos += 1
-
+    
     output.extend(gain_bytes)
-
+    
     with open(output_path, 'wb') as f:
         f.write(output)
-
+    
     print(f"Saved Ultra HDR JPEG: {output_path}")
     print(f"  SDR size: {len(sdr_bytes)} bytes")
     print(f"  Gain map size: {len(gain_bytes)} bytes")
@@ -230,31 +217,28 @@ def main():
     parser.add_argument("-b", "--max-boost", type=float, default=3.0,
                         help="Maximum HDR boost factor (default: 3.0)")
     args = parser.parse_args()
-
+    
     if not HAS_CV2:
         print("Error: OpenCV (cv2) is required for Ultra HDR encoding")
         sys.exit(1)
-
+    
     input_path = Path(args.input)
-
+    
     if args.output:
         output_path = Path(args.output)
     else:
         output_path = input_path.with_suffix('.jpg')
-
-    if input_path.suffix == ".latent":
-        arr = load_latent(input_path)
-    else:
-        arr = load_npy(input_path)
+    
+    arr = load_npy(input_path)
     arr = prepare_array(arr)
-
+    
     print(f"Creating SDR image (gamma={args.gamma})...")
     sdr_8bit, hdr_normalized, min_val, max_val = create_sdr_image(arr, args.gamma)
     print(f"Data range: {min_val:.4f} to {max_val:.4f}")
-
+    
     print(f"Creating gain map (max_boost={args.max_boost})...")
     gain_map_8bit = create_gain_map(hdr_normalized, sdr_8bit, args.gamma, args.max_boost)
-
+    
     save_ultrahdr_jpeg(sdr_8bit, gain_map_8bit, output_path, args.quality, args.max_boost)
 
 
