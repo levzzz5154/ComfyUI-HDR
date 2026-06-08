@@ -61,29 +61,29 @@ def prepare_array(arr):
     elif arr.ndim == 3:
         if arr.shape[0] <= 4:
             arr = arr.transpose(1, 2, 0)
-
+    
     if arr.ndim == 2:
         arr = np.stack([arr] * 3, axis=-1)
-
+    
     if arr.shape[2] == 4:
         arr = arr[:, :, :3]
-
+    
     return arr
 
 
 def normalize_to_16bit(arr, tonemap_mode="none", gamma=2.2):
     arr = prepare_array(arr)
-
+    
     if tonemap_mode != "none":
         print(f"Tonemap: {tonemap_mode}, gamma={gamma}")
         arr = tonemap(arr, tonemap_mode, gamma)
-
+    
     min_val = arr.min()
     max_val = arr.max()
     print(f"Min: {min_val}, Max: {max_val}")
     arr = (arr - min_val) / (max_val - min_val) * 65535
     arr = arr.astype(np.uint16)
-
+    
     return arr
 
 
@@ -97,26 +97,26 @@ def save_16bit_png(arr, output_path):
 
 def save_hdr_avif(arr, output_path, peak_luminance=1000, quality=90):
     arr = prepare_array(arr)
-
+    
     min_val = arr.min()
     max_val = arr.max()
     print(f"Min: {min_val}, Max: {max_val}")
-
+    
     arr = (arr - min_val) / (max_val - min_val) * 65535
     arr = arr.astype(np.uint16)
-
+    
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
         tmp_png = tmp.name
-
+    
     try:
         if HAS_CV2:
             cv2.imwrite(tmp_png, cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
         else:
             Image.fromarray(arr, mode='I;16').save(tmp_png)
-
+        
         max_cll = int(peak_luminance)
         max_fall = int(peak_luminance * 0.5)
-
+        
         cmd = [
             'avifenc',
             '-d', '10',
@@ -127,14 +127,14 @@ def save_hdr_avif(arr, output_path, peak_luminance=1000, quality=90):
             tmp_png,
             str(output_path)
         ]
-
+        
         print(f"Running: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
-
+        
         if result.returncode != 0:
             print(f"Error: {result.stderr}")
             return False
-
+        
         print(f"Saved HDR AVIF: {output_path} (peak: {peak_luminance} nits)")
         return True
     finally:
@@ -151,24 +151,24 @@ def main():
     parser.add_argument("-t", "--tonemap", choices=["none", "linear_to_srgb", "srgb_to_linear", "reinhard", "aces"],
                         default="none", help="Tonemap mode for PNG (default: none)")
     parser.add_argument("-g", "--gamma", type=float, default=2.2, help="Gamma value (default: 2.2)")
-    parser.add_argument("-p", "--peak", type=float, default=1000,
+    parser.add_argument("-p", "--peak", type=float, default=1000, 
                         help="Peak luminance for HDR AVIF in nits (default: 1000)")
     parser.add_argument("-q", "--quality", type=int, default=90,
                         help="AVIF quality 0-100 (default: 90)")
     args = parser.parse_args()
-
+    
     input_path = Path(args.input)
-
+    
     if args.output:
         output_path = Path(args.output)
     else:
         output_path = input_path.with_suffix(f'.{args.format}')
-
+    
     if input_path.suffix == ".latent":
         arr = load_latent(input_path)
     else:
         arr = load_npy(input_path)
-
+    
     if args.format == "avif":
         save_hdr_avif(arr, output_path, args.peak, args.quality)
     else:
